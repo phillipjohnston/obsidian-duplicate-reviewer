@@ -1,0 +1,124 @@
+/* Duplicate Reviewer Plugin Styles */
+
+.duplicate-review-root {
+    padding: 10px;
+}
+
+.duplicate-review-header {
+    margin-bottom: 16px;
+}
+
+.duplicate-review-header h4 {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.duplicate-review-folder {
+    font-size: 12px;
+    color: var(--text-muted);
+    word-break: break-word;
+}
+
+.duplicate-review-scanning {
+    padding: 20px;
+    text-align: center;
+}
+
+.duplicate-review-scanning-text {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.duplicate-review-empty {
+    padding: 20px;
+    text-align: center;
+}
+
+.duplicate-review-empty-text {
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.duplicate-review-empty-hint {
+    font-size: 12px;
+    color: var(--text-faint);
+}
+
+.duplicate-review-summary {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.duplicate-review-progress {
+    color: var(--text-success);
+    margin-top: 4px;
+}
+
+.duplicate-review-groups {
+    margin-top: 8px;
+}
+
+/* Compare button in group header */
+.duplicate-review-compare-btn {
+    display: inline-block;
+    padding: 2px 8px;
+    margin-left: 8px;
+    font-size: 11px;
+    color: var(--text-on-accent);
+    background-color: var(--interactive-accent);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.1s ease;
+}
+
+.duplicate-review-compare-btn:hover {
+    background-color: var(--interactive-accent-hover);
+}
+
+/* Style file entries with path hint */
+.duplicate-review-groups .nav-file-title {
+    cursor: pointer;
+}
+
+.duplicate-review-groups .nav-file-title:hover {
+    background-color: var(--background-modifier-hover);
+}
+
+/* Group folder styling */
+.duplicate-review-groups .nav-folder-title {
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    cursor: pointer;
+}
+
+.duplicate-review-groups .nav-folder-title:hover {
+    background-color: var(--background-modifier-hover);
+}
+
+.duplicate-review-groups .nav-folder-title-content {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Collapse indicator */
+.duplicate-review-groups .nav-folder-collapse-indicator {
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.duplicate-review-groups .nav-folder-collapse-indicator svg {
+    width: 14px;
+    height: 14px;
+    transition: transform 0.15s ease;
+}

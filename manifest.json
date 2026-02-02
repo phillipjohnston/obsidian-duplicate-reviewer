@@ -1,0 +1,10 @@
+{
+    "id": "duplicate-reviewer",
+    "name": "Duplicate Reviewer",
+    "version": "1.0.0",
+    "minAppVersion": "0.15.4",
+    "description": "Find duplicate notes and review them with multi-pane comparison",
+    "author": "Phillip Johnston",
+    "authorUrl": "https://github.com/phillipjohnston",
+    "isDesktopOnly": false
+}
