@@ -17,6 +17,7 @@ export interface DuplicateGroup {
 
 export interface DuplicateReviewerSettings {
     titleSimilarityThreshold: number;
+    enableContentSimilarity: boolean;
     contentSimilarityThreshold: number;
     contentCharsToAnalyze: number;
     ignoredFolders: string[];
@@ -26,6 +27,7 @@ export interface DuplicateReviewerSettings {
 
 export const DEFAULT_SETTINGS: DuplicateReviewerSettings = {
     titleSimilarityThreshold: 0.8,
+    enableContentSimilarity: false,
     contentSimilarityThreshold: 0.6,
     contentCharsToAnalyze: 1000,
     ignoredFolders: [".obsidian", ".git", ".trash", "998 Readwise"],

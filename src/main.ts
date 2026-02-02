@@ -165,7 +165,7 @@ export default class DuplicateReviewerPlugin extends Plugin {
                 this.app,
                 folder,
                 this.settings,
-                true // refine with content
+                this.settings.enableContentSimilarity
             );
 
             // Update the view with results

@@ -35,34 +35,49 @@ export class DuplicateReviewerSettingTab extends PluginSettingTab {
             );
 
         new Setting(containerEl)
-            .setName("Content similarity threshold")
-            .setDesc("Minimum content similarity (0-100%) to flag as likely duplicate")
-            .addSlider((slider) =>
-                slider
-                    .setLimits(30, 100, 5)
-                    .setValue(this.plugin.settings.contentSimilarityThreshold * 100)
-                    .setDynamicTooltip()
+            .setName("Enable content similarity checking")
+            .setDesc("Compare file content in addition to titles when looking for duplicates")
+            .addToggle((toggle) =>
+                toggle
+                    .setValue(this.plugin.settings.enableContentSimilarity)
                     .onChange(async (value) => {
-                        this.plugin.settings.contentSimilarityThreshold = value / 100;
+                        this.plugin.settings.enableContentSimilarity = value;
                         await this.plugin.saveSettings();
+                        this.display();
                     })
             );
 
-        new Setting(containerEl)
-            .setName("Content characters to analyze")
-            .setDesc("Number of characters from the start of each file to compare")
-            .addText((text) =>
-                text
-                    .setPlaceholder("1000")
-                    .setValue(String(this.plugin.settings.contentCharsToAnalyze))
-                    .onChange(async (value) => {
-                        const num = parseInt(value, 10);
-                        if (!isNaN(num) && num > 0) {
-                            this.plugin.settings.contentCharsToAnalyze = num;
+        if (this.plugin.settings.enableContentSimilarity) {
+            new Setting(containerEl)
+                .setName("Content similarity threshold")
+                .setDesc("Minimum content similarity (0-100%) to flag as likely duplicate")
+                .addSlider((slider) =>
+                    slider
+                        .setLimits(30, 100, 5)
+                        .setValue(this.plugin.settings.contentSimilarityThreshold * 100)
+                        .setDynamicTooltip()
+                        .onChange(async (value) => {
+                            this.plugin.settings.contentSimilarityThreshold = value / 100;
                             await this.plugin.saveSettings();
-                        }
-                    })
-            );
+                        })
+                );
+
+            new Setting(containerEl)
+                .setName("Content characters to analyze")
+                .setDesc("Number of characters from the start of each file to compare")
+                .addText((text) =>
+                    text
+                        .setPlaceholder("1000")
+                        .setValue(String(this.plugin.settings.contentCharsToAnalyze))
+                        .onChange(async (value) => {
+                            const num = parseInt(value, 10);
+                            if (!isNaN(num) && num > 0) {
+                                this.plugin.settings.contentCharsToAnalyze = num;
+                                await this.plugin.saveSettings();
+                            }
+                        })
+                );
+        }
 
         // Folders Section
         containerEl.createEl("h3", { text: "Folders" });
