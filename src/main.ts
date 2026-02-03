@@ -132,8 +132,9 @@ export default class DuplicateReviewerPlugin extends Plugin {
         this.addCommand({
             id: "open-duplicate-review-pane",
             name: "Open duplicate review pane",
-            callback: () => {
-                this.activateView();
+            callback: async () => {
+                await this.activateView();
+                await this.loadMostRecentCache();
             },
         });
 
@@ -201,6 +202,32 @@ export default class DuplicateReviewerPlugin extends Plugin {
         }
     }
 
+    // ── auto-populate from cache ───────────────────────────────────────────
+
+    /**
+     * If the review pane is open but empty, load the most recently built
+     * cache entry into it.  Used by "Open duplicate review pane" so that
+     * a background-built cache is immediately visible.
+     */
+    async loadMostRecentCache(): Promise<void> {
+        if (!this.duplicateReviewView || this.duplicateReviewView.hasData()) return;
+
+        const recentPath = this.cacheManager.getMostRecentFolderPath();
+        if (recentPath === null) return;
+
+        const folder = recentPath === "/"
+            ? this.app.vault.getRoot()
+            : this.app.vault.getFolderByPath(recentPath);
+        if (!folder) return;
+
+        const files = collectMarkdownFiles(this.app, folder, this.settings.ignoredFolders);
+        const cached = this.cacheManager.get(recentPath, files, this.settings);
+        if (!cached) return;
+
+        const displayPath = recentPath === "/" ? "Entire vault" : recentPath;
+        this.duplicateReviewView.setGroups(cached, displayPath, true);
+    }
+
     // ── duplicate review (cache-aware) ─────────────────────────────────────
 
     async startDuplicateReview(folder: TFolder): Promise<void> {
@@ -259,7 +286,7 @@ export default class DuplicateReviewerPlugin extends Plugin {
 
             // Cache the result
             this.cacheManager.put(cacheKey, files, groups, this.settings);
-            this.cacheManager.dirtyPaths.clear();
+            this.cacheManager.clearDirtyPathsForFolder(cacheKey);
             await this.cacheManager.save();
 
             if (this.duplicateReviewView) {
@@ -328,7 +355,7 @@ export default class DuplicateReviewerPlugin extends Plugin {
 
             // Persist
             this.cacheManager.put(cacheKey, files, groups, this.settings);
-            this.cacheManager.dirtyPaths.clear();
+            this.cacheManager.clearDirtyPathsForFolder(cacheKey);
             await this.cacheManager.save();
 
             notice.hide();

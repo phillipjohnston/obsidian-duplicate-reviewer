@@ -25,6 +25,11 @@ export class DuplicateReviewView extends ItemView {
         this.plugin = plugin;
     }
 
+    /** True once the view has been populated with a folder (even if 0 groups). */
+    public hasData(): boolean {
+        return this.currentFolder !== "";
+    }
+
     public getViewType(): string {
         return DUPLICATE_REVIEW_VIEW_TYPE;
     }

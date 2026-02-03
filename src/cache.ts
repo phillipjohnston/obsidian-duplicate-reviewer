@@ -45,8 +45,16 @@ export class CacheManager {
      *   3. Cached settings match current plugin settings
      */
     isValid(entry: CacheEntry, currentFiles: TFile[], settings: DuplicateReviewerSettings): boolean {
-        // Fast path: any dirty .md file invalidates the cache
-        if (this.dirtyPaths.size > 0) return false;
+        // Only invalidate when a dirty path actually falls inside this entry's folder
+        if (this.dirtyPaths.size > 0) {
+            if (entry.folderPath === "/") {
+                return false; // root covers everything
+            }
+            const prefix = entry.folderPath + "/";
+            for (const dirtyPath of this.dirtyPaths) {
+                if (dirtyPath.startsWith(prefix)) return false;
+            }
+        }
 
         // File-count + mtime fingerprint
         if (currentFiles.length !== entry.fileCount) return false;
@@ -133,6 +141,33 @@ export class CacheManager {
             }
         }
         return latest;
+    }
+
+    /** Return the folder-path key of the most recently built entry, or null. */
+    getMostRecentFolderPath(): string | null {
+        let latestTimestamp = -1;
+        let latestKey: string | null = null;
+        for (const [key, entry] of this.entries) {
+            if (entry.scanTimestamp > latestTimestamp) {
+                latestTimestamp = entry.scanTimestamp;
+                latestKey = key;
+            }
+        }
+        return latestKey;
+    }
+
+    /** Remove only dirty paths that fall within the given folder. */
+    clearDirtyPathsForFolder(folderPath: string): void {
+        if (folderPath === "/") {
+            this.dirtyPaths.clear();
+            return;
+        }
+        const prefix = folderPath + "/";
+        for (const path of this.dirtyPaths) {
+            if (path.startsWith(prefix)) {
+                this.dirtyPaths.delete(path);
+            }
+        }
     }
 
     /** Remove all entries and clear dirty tracking. */
