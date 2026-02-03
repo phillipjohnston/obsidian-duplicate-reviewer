@@ -256,15 +256,12 @@ export class DuplicateReviewView extends ItemView {
 
         // Files in this group
         for (const file of group.files) {
-            this.renderFile(childrenEl, file, !isExpanded);
+            this.renderFile(childrenEl, file);
         }
     }
 
-    private renderFile(parentEl: HTMLElement, file: TFile, hidden: boolean): void {
+    private renderFile(parentEl: HTMLElement, file: TFile): void {
         const navFileEl = parentEl.createDiv("nav-file");
-        if (hidden) {
-            navFileEl.style.display = "none";
-        }
 
         const navFileTitle = navFileEl.createDiv("nav-file-title");
         navFileTitle.createDiv("nav-file-title-content").setText(file.basename);
