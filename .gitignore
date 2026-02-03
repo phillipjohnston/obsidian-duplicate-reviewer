@@ -4,6 +4,9 @@ node_modules/
 # Build output
 main.js
 
+#Runtime output
+data.json
+
 # npm/yarn
 npm-debug.log*
 yarn-debug.log*
