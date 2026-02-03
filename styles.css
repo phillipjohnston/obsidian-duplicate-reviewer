@@ -122,3 +122,51 @@
     height: 14px;
     transition: transform 0.15s ease;
 }
+
+/* Folder row: path + optional cached badge side by side */
+.duplicate-review-folder-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* Cached badge shown next to the folder name when results came from cache */
+.duplicate-review-cached-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-success);
+    background-color: var(--background-modifier-success);
+    padding: 1px 6px;
+    border-radius: 10px;
+}
+
+/* Scan-progress bar track */
+.duplicate-review-progress-bar {
+    width: 100%;
+    height: 6px;
+    margin-top: 10px;
+    background-color: var(--background-modifier-border);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+/* Scan-progress bar animated fill */
+.duplicate-review-progress-bar-fill {
+    height: 100%;
+    width: 0%;
+    background-color: var(--interactive-accent);
+    border-radius: 3px;
+    transition: width 0.25s ease;
+}
+
+/* Cache status line in the settings tab */
+.duplicate-review-cache-status {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    padding: 6px 0;
+}

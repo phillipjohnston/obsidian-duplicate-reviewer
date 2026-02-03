@@ -1,6 +1,10 @@
 import { App, TFile, TFolder } from "obsidian";
 import { normalizeTitle, titleSimilarity, contentSimilarity } from "src/similarity";
-import { DuplicateCandidate, DuplicateGroup, DuplicateReviewerSettings } from "src/types";
+import { DuplicateCandidate, DuplicateGroup, DuplicateReviewerSettings, ScanProgress } from "src/types";
+
+function yieldToEventLoop(): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 /**
  * Check if a file path should be skipped based on ignored folders.
@@ -11,7 +15,6 @@ export function shouldSkipPath(path: string, ignoredFolders: string[]): boolean 
             return true;
         }
     }
-    // Skip hidden folders/files
     const parts = path.split("/");
     for (const part of parts) {
         if (part.startsWith(".")) {
@@ -22,74 +25,106 @@ export function shouldSkipPath(path: string, ignoredFolders: string[]): boolean 
 }
 
 /**
- * Collect all markdown files from a folder recursively.
+ * Collect markdown files scoped to a folder, using vault.getMarkdownFiles().
  */
 export function collectMarkdownFiles(
     app: App,
     folder: TFolder,
     ignoredFolders: string[]
 ): TFile[] {
-    const files: TFile[] = [];
-
-    const collectRecursive = (currentFolder: TFolder) => {
-        for (const child of currentFolder.children) {
-            if (child instanceof TFile && child.extension === "md") {
-                if (!shouldSkipPath(child.path, ignoredFolders)) {
-                    files.push(child);
-                }
-            } else if (child instanceof TFolder) {
-                if (!shouldSkipPath(child.path, ignoredFolders)) {
-                    collectRecursive(child);
-                }
-            }
-        }
-    };
-
-    collectRecursive(folder);
-    return files;
+    const prefix = folder.path === "/" ? "" : folder.path + "/";
+    return app.vault.getMarkdownFiles().filter((file) =>
+        (prefix === "" || file.path.startsWith(prefix)) &&
+        !shouldSkipPath(file.path, ignoredFolders)
+    );
 }
 
 /**
- * Find potential duplicate notes based on title similarity.
+ * Compute the normalised word set for a filename (the unit the inverted index keys on).
  */
-export function findTitleDuplicates(
+function wordSet(basename: string): Set<string> {
+    const norm = normalizeTitle(basename);
+    return new Set(norm.split(/\s+/).filter(Boolean));
+}
+
+/**
+ * Find potential duplicate notes using an inverted-index single-pass algorithm.
+ *
+ * For each file processed, its words are looked up in the index to find
+ * previously-seen files that share at least one word.  Only those candidate
+ * pairs are scored with full Jaccard similarity — the vast majority of the
+ * vault never needs to be compared at all.  Yields to the event loop after
+ * every file so Obsidian stays responsive on large vaults.
+ */
+export async function findTitleDuplicates(
     files: TFile[],
-    titleThreshold: number
-): DuplicateCandidate[] {
+    titleThreshold: number,
+    signal?: AbortSignal,
+    onProgress?: (progress: ScanProgress) => void
+): Promise<DuplicateCandidate[]> {
     const duplicates: DuplicateCandidate[] = [];
-    const checkedPairs = new Set<string>();
+
+    // inverted index: normalised word → indices into `files` already processed
+    const index = new Map<string, number[]>();
+    // pre-computed word sets, keyed by file index
+    const wordSets = new Map<number, Set<string>>();
 
     for (let i = 0; i < files.length; i++) {
-        const file1 = files[i];
-        const title1 = file1.basename;
+        if (signal?.aborted) break;
 
-        for (let j = i + 1; j < files.length; j++) {
-            const file2 = files[j];
-            const title2 = file2.basename;
+        const file = files[i];
+        const words = wordSet(file.basename);
+        wordSets.set(i, words);
 
-            // Create unique pair key
-            const pairKey = [file1.path, file2.path].sort().join("|");
-            if (checkedPairs.has(pairKey)) {
-                continue;
+        // Collect candidate indices: files already in the index that share ≥1 word
+        const candidateIndices = new Set<number>();
+        for (const w of words) {
+            const bucket = index.get(w);
+            if (bucket) {
+                for (const idx of bucket) {
+                    candidateIndices.add(idx);
+                }
             }
-            checkedPairs.add(pairKey);
+        }
 
-            // Calculate title similarity
-            const tSim = titleSimilarity(title1, title2);
+        // Score only the candidates
+        for (const j of candidateIndices) {
+            const otherWords = wordSets.get(j)!;
+            // Jaccard on pre-computed word sets (same logic as titleSimilarity)
+            let intersectionCount = 0;
+            for (const w of words) {
+                if (otherWords.has(w)) intersectionCount++;
+            }
+            const unionSize = words.size + otherWords.size - intersectionCount;
+            const sim = unionSize === 0 ? 0 : intersectionCount / unionSize;
 
-            if (tSim >= titleThreshold) {
+            if (sim >= titleThreshold) {
                 duplicates.push({
-                    file1,
-                    file2,
-                    titleSimilarity: tSim,
+                    file1: files[j],
+                    file2: file,
+                    titleSimilarity: sim,
                 });
             }
         }
+
+        // Insert this file into the index
+        for (const w of words) {
+            let bucket = index.get(w);
+            if (!bucket) {
+                bucket = [];
+                index.set(w, bucket);
+            }
+            bucket.push(i);
+        }
+
+        // Yield + progress every file
+        await yieldToEventLoop();
+        if (onProgress) {
+            onProgress({ stage: "comparing", current: i + 1, total: files.length });
+        }
     }
 
-    // Sort by title similarity descending
     duplicates.sort((a, b) => b.titleSimilarity - a.titleSimilarity);
-
     return duplicates;
 }
 
@@ -100,11 +135,16 @@ export async function refineWithContent(
     app: App,
     candidates: DuplicateCandidate[],
     contentThreshold: number,
-    maxChars: number
+    maxChars: number,
+    signal?: AbortSignal,
+    onProgress?: (progress: ScanProgress) => void
 ): Promise<DuplicateCandidate[]> {
     const refined: DuplicateCandidate[] = [];
 
-    for (const item of candidates) {
+    for (let i = 0; i < candidates.length; i++) {
+        if (signal?.aborted) break;
+
+        const item = candidates[i];
         try {
             const content1 = await app.vault.cachedRead(item.file1);
             const content2 = await app.vault.cachedRead(item.file2);
@@ -117,16 +157,19 @@ export async function refineWithContent(
                 likelyDuplicate: cSim >= contentThreshold,
             });
         } catch {
-            // Keep item without content similarity if files can't be read
             refined.push({
                 ...item,
                 contentSimilarity: undefined,
                 likelyDuplicate: false,
             });
         }
+
+        await yieldToEventLoop();
+        if (onProgress) {
+            onProgress({ stage: "refining", current: i + 1, total: candidates.length });
+        }
     }
 
-    // Sort by combined similarity (title + content)
     refined.sort((a, b) => {
         const scoreA = a.titleSimilarity + (a.contentSimilarity || 0);
         const scoreB = b.titleSimilarity + (b.contentSimilarity || 0);
@@ -159,7 +202,6 @@ export function groupDuplicates(candidates: DuplicateCandidate[]): DuplicateGrou
         group.originalTitles.add(candidate.file2.basename);
         group.candidates.push(candidate);
 
-        // Add files to the group (avoiding duplicates)
         if (!group.files.some((f) => f.path === candidate.file1.path)) {
             group.files.push(candidate.file1);
         }
@@ -168,10 +210,8 @@ export function groupDuplicates(candidates: DuplicateCandidate[]): DuplicateGrou
         }
     }
 
-    // Convert to array and sort by file count descending
     const groups = Array.from(titleGroups.values());
     groups.sort((a, b) => b.files.length - a.files.length);
-
     return groups;
 }
 
@@ -197,28 +237,51 @@ export async function scanForDuplicates(
     app: App,
     folder: TFolder,
     settings: DuplicateReviewerSettings,
-    refine: boolean = true
+    refine: boolean = true,
+    signal?: AbortSignal,
+    onProgress?: (progress: ScanProgress) => void
 ): Promise<DuplicateGroup[]> {
-    // Collect files
     const files = collectMarkdownFiles(app, folder, settings.ignoredFolders);
 
     if (files.length < 2) {
         return [];
     }
 
-    // Find title duplicates
-    let candidates = findTitleDuplicates(files, settings.titleSimilarityThreshold);
+    if (onProgress) {
+        onProgress({ stage: "collecting", current: files.length, total: files.length });
+    }
 
-    // Optionally refine with content
+    let candidates = await findTitleDuplicates(
+        files,
+        settings.titleSimilarityThreshold,
+        signal,
+        onProgress
+    );
+
+    if (signal?.aborted) return [];
+
     if (refine && candidates.length > 0) {
         candidates = await refineWithContent(
             app,
             candidates,
             settings.contentSimilarityThreshold,
-            settings.contentCharsToAnalyze
+            settings.contentCharsToAnalyze,
+            signal,
+            onProgress
         );
     }
 
-    // Group by normalized title
-    return groupDuplicates(candidates);
+    if (signal?.aborted) return [];
+
+    if (onProgress) {
+        onProgress({ stage: "grouping", current: 0, total: candidates.length });
+    }
+
+    const groups = groupDuplicates(candidates);
+
+    if (onProgress) {
+        onProgress({ stage: "done", current: groups.length, total: groups.length });
+    }
+
+    return groups;
 }

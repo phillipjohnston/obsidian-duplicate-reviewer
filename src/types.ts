@@ -34,3 +34,31 @@ export const DEFAULT_SETTINGS: DuplicateReviewerSettings = {
     commonPatterns: ["Notes", "Untitled", "Note", "New Note"],
     maxComparisonPanes: 3,
 };
+
+// --- Cache & progress types ---
+
+export interface SerializedDuplicateGroup {
+    normalizedTitle: string;
+    originalTitles: string[];
+    filePaths: string[];
+}
+
+export interface CacheEntry {
+    folderPath: string;
+    scanTimestamp: number;
+    fileCount: number;
+    maxMtime: number;
+    groups: SerializedDuplicateGroup[];
+    settings: {
+        titleThreshold: number;
+        enableContent: boolean;
+        contentThreshold: number;
+        contentChars: number;
+    };
+}
+
+export interface ScanProgress {
+    stage: "collecting" | "comparing" | "refining" | "grouping" | "done";
+    current: number;
+    total: number;
+}

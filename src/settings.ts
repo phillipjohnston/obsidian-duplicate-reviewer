@@ -134,5 +134,36 @@ export class DuplicateReviewerSettingTab extends PluginSettingTab {
                         await this.plugin.saveSettings();
                     })
             );
+
+        // Cache Section
+        containerEl.createEl("h3", { text: "Cache" });
+
+        const cacheManager = this.plugin.cacheManager;
+        const entryCount = cacheManager ? cacheManager.size : 0;
+        const lastBuilt = cacheManager ? cacheManager.lastBuilt : null;
+        const lastBuiltStr = lastBuilt
+            ? new Date(lastBuilt).toLocaleString()
+            : "never";
+
+        containerEl.createDiv({
+            cls: "duplicate-review-cache-status",
+            text: `Cache entries: ${entryCount}  |  Last built: ${lastBuiltStr}`,
+        });
+
+        new Setting(containerEl)
+            .setName("Clear cache")
+            .setDesc("Remove all cached scan results. The next scan will recompute from scratch.")
+            .addButton((button) =>
+                button
+                    .setButtonText("Clear cache")
+                    .onClick(async () => {
+                        if (cacheManager) {
+                            cacheManager.clear();
+                            await cacheManager.save();
+                        }
+                        // Re-render settings to update the status line
+                        this.display();
+                    })
+            );
     }
 }

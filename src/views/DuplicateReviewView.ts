@@ -1,6 +1,6 @@
-import { ItemView, WorkspaceLeaf, Menu, TFile, setIcon } from "obsidian";
+import { ItemView, WorkspaceLeaf, Menu, TFile } from "obsidian";
 import type DuplicateReviewerPlugin from "src/main";
-import { DuplicateGroup } from "src/types";
+import { DuplicateGroup, ScanProgress } from "src/types";
 
 export const DUPLICATE_REVIEW_VIEW_TYPE = "duplicate-review-view";
 
@@ -13,6 +13,12 @@ export class DuplicateReviewView extends ItemView {
     private currentGroupIndex: number = 0;
     private scanInProgress: boolean = false;
     private currentFolder: string = "";
+    private resultFromCache: boolean = false;
+
+    // Live-updated progress bar elements (kept across updateProgress calls)
+    private progressBarTrack: HTMLDivElement | null = null;
+    private progressBarFill: HTMLDivElement | null = null;
+    private progressLabel: HTMLDivElement | null = null;
 
     constructor(leaf: WorkspaceLeaf, plugin: DuplicateReviewerPlugin) {
         super(leaf);
@@ -44,22 +50,73 @@ export class DuplicateReviewView extends ItemView {
     /**
      * Set the duplicate groups to display.
      */
-    public setGroups(groups: DuplicateGroup[], folderPath: string): void {
+    public setGroups(groups: DuplicateGroup[], folderPath: string, fromCache: boolean = false): void {
         this.groups = groups;
         this.currentFolder = folderPath;
         this.currentGroupIndex = 0;
         this.scanInProgress = false;
+        this.resultFromCache = fromCache;
+        this.clearProgressRefs();
         this.redraw();
     }
 
     /**
-     * Show scanning progress.
+     * Show scanning progress indicator.
      */
     public showScanning(folderPath: string): void {
         this.scanInProgress = true;
         this.currentFolder = folderPath;
+        this.resultFromCache = false;
         this.groups = [];
+        this.clearProgressRefs();
         this.redraw();
+    }
+
+    /**
+     * Update the in-place progress bar.  Creates elements on first call
+     * (during the scanning state rendered by showScanning); subsequent calls
+     * just update text + bar width without touching the rest of the DOM.
+     */
+    public updateProgress(progress: ScanProgress): void {
+        const pct = progress.total > 0
+            ? Math.round((progress.current / progress.total) * 100)
+            : 0;
+
+        const stageLabel =
+            progress.stage === "collecting" ? "Collecting files…" :
+            progress.stage === "comparing" ? "Comparing titles…" :
+            progress.stage === "refining"   ? "Refining with content…" :
+            progress.stage === "grouping"   ? "Grouping results…" :
+                                              "Done";
+
+        // If elements already exist, update in place
+        if (this.progressLabel && this.progressBarFill) {
+            this.progressLabel.setText(`${stageLabel} ${pct}%`);
+            this.progressBarFill.style.width = `${pct}%`;
+            return;
+        }
+
+        // Elements don't exist yet — find the scanning container and build them
+        const contentEl = this.containerEl.children[1];
+        if (!contentEl) return;
+        const scanningEl = contentEl.querySelector(".duplicate-review-scanning") as HTMLDivElement | null;
+        if (!scanningEl) return;
+
+        // Replace the static text with a label + bar
+        scanningEl.empty();
+        this.progressLabel = scanningEl.createDiv({
+            cls: "duplicate-review-scanning-text",
+            text: `${stageLabel} ${pct}%`,
+        });
+        this.progressBarTrack = scanningEl.createDiv("duplicate-review-progress-bar");
+        this.progressBarFill = this.progressBarTrack.createDiv("duplicate-review-progress-bar-fill");
+        this.progressBarFill.style.width = `${pct}%`;
+    }
+
+    private clearProgressRefs(): void {
+        this.progressBarTrack = null;
+        this.progressBarFill = null;
+        this.progressLabel = null;
     }
 
     /**
@@ -76,10 +133,17 @@ export class DuplicateReviewView extends ItemView {
         headerEl.createEl("h4", { text: "Duplicate Review" });
 
         if (this.currentFolder) {
-            headerEl.createEl("div", {
+            const folderRowEl = headerEl.createDiv("duplicate-review-folder-row");
+            folderRowEl.createEl("span", {
                 cls: "duplicate-review-folder",
-                text: `Folder: ${this.currentFolder || "Entire vault"}`,
+                text: `Folder: ${this.currentFolder}`,
             });
+            if (this.resultFromCache) {
+                folderRowEl.createEl("span", {
+                    cls: "duplicate-review-cached-badge",
+                    text: "cached",
+                });
+            }
         }
 
         // Show scanning state
