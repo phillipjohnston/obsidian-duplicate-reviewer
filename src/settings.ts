@@ -135,6 +135,37 @@ export class DuplicateReviewerSettingTab extends PluginSettingTab {
                     })
             );
 
+        // Exclusions Section
+        containerEl.createEl("h3", { text: "Exclusions" });
+
+        containerEl.createDiv({
+            cls: "duplicate-review-setting-desc",
+            text: 'Add a "duplicate-exclusion" key to a note\'s YAML frontmatter to suppress it from being flagged as a duplicate of specific files. '
+                + 'Exclusions are bidirectional: if A excludes B, the pair is hidden regardless of B\'s frontmatter. '
+                + 'Syntax example — duplicate-exclusion: [[Other Note Title]]',
+        });
+
+        // Dismissals Section
+        containerEl.createEl("h3", { text: "Dismissals" });
+
+        const dismissCount = this.plugin.dismissedGroups.length;
+        containerEl.createDiv({
+            cls: "duplicate-review-setting-desc",
+            text: `${dismissCount} dismissed group${dismissCount === 1 ? "" : "s"}`,
+        });
+
+        new Setting(containerEl)
+            .setName("Clear all dismissals")
+            .setDesc("Dismissed groups will reappear on the next scan or cache load.")
+            .addButton((button) =>
+                button
+                    .setButtonText("Clear all dismissals")
+                    .onClick(async () => {
+                        await this.plugin.clearDismissals();
+                        this.display();
+                    })
+            );
+
         // Cache Section
         containerEl.createEl("h3", { text: "Cache" });
 

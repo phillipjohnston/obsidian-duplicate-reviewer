@@ -79,6 +79,33 @@
     background-color: var(--interactive-accent-hover);
 }
 
+/* Dismiss button in group header */
+.duplicate-review-dismiss-btn {
+    display: inline-block;
+    padding: 2px 8px;
+    margin-left: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+    background-color: var(--background-modifier-border);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.1s ease, color 0.1s ease;
+}
+
+.duplicate-review-dismiss-btn:hover {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+/* Description text in settings sections */
+.duplicate-review-setting-desc {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    padding: 0 0 8px 0;
+    line-height: 1.5;
+}
+
 /* Style file entries with path hint */
 .duplicate-review-groups .nav-file-title {
     cursor: pointer;

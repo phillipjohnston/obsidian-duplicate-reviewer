@@ -230,6 +230,104 @@ export function findByPattern(
     });
 }
 
+// ── YAML exclusion helpers ────────────────────────────────────────────────
+
+/**
+ * Recursively extract every string leaf from an arbitrary parsed-YAML value.
+ * Strips `[[` / `]]` wrappers and any `|alias` suffix so that both
+ * `[[Foo]]` and plain `Foo` resolve to `"Foo"`.
+ */
+export function parseExclusionTargets(raw: unknown): string[] {
+    const results: string[] = [];
+
+    function walk(value: unknown): void {
+        if (typeof value === "string") {
+            let s = value.trim();
+            // Strip [[ ]] wrappers (may be nested from YAML flow-sequence parsing)
+            s = s.replace(/^\[\[/, "").replace(/\]\]$/, "");
+            // Strip |alias suffix
+            const pipeIdx = s.indexOf("|");
+            if (pipeIdx !== -1) s = s.substring(0, pipeIdx);
+            s = s.trim();
+            if (s) results.push(s);
+        } else if (Array.isArray(value)) {
+            for (const item of value) walk(item);
+        }
+    }
+
+    walk(raw);
+    return results;
+}
+
+/**
+ * Resolve a link target name to a vault file path.
+ * Tries exact path match first, then case-insensitive basename match.
+ * Returns the file's path, or null if not found.
+ */
+export function resolveLink(app: App, target: string): string | null {
+    // 1. Exact path (with and without .md extension)
+    const exact = app.vault.getFileByPath(target);
+    if (exact) return exact.path;
+    const exactMd = app.vault.getFileByPath(target + ".md");
+    if (exactMd) return exactMd.path;
+
+    // 2. Case-insensitive basename match (common [[Just a Name]] style)
+    const lowerTarget = target.toLowerCase();
+    for (const file of app.vault.getMarkdownFiles()) {
+        const baseName = file.basename; // filename without .md
+        if (baseName.toLowerCase() === lowerTarget) return file.path;
+    }
+
+    return null;
+}
+
+/**
+ * Build a map: filePath → Set<filePath> of exclusion targets.
+ * Reads the `duplicate-exclusion` frontmatter key from the metadata cache.
+ */
+export function buildExclusionMap(app: App, files: TFile[]): Map<string, Set<string>> {
+    const map = new Map<string, Set<string>>();
+
+    for (const file of files) {
+        const cache = app.metadataCache.getFileCache(file);
+        const raw = cache?.frontmatter?.["duplicate-exclusion"];
+        if (raw == null) continue;
+
+        const targets = parseExclusionTargets(raw);
+        const resolved = new Set<string>();
+        for (const target of targets) {
+            const path = resolveLink(app, target);
+            if (path) resolved.add(path);
+        }
+
+        if (resolved.size > 0) {
+            map.set(file.path, resolved);
+        }
+    }
+
+    return map;
+}
+
+/**
+ * Remove candidates where either file excludes the other.
+ * Exclusion is bidirectional: if A lists B, the A↔B pair is dropped
+ * regardless of whether B lists A.
+ */
+export function filterExcludedCandidates(
+    candidates: DuplicateCandidate[],
+    exclusionMap: Map<string, Set<string>>
+): DuplicateCandidate[] {
+    return candidates.filter((c) => {
+        const exc1 = exclusionMap.get(c.file1.path);
+        if (exc1 && exc1.has(c.file2.path)) return false;
+        const exc2 = exclusionMap.get(c.file2.path);
+        if (exc2 && exc2.has(c.file1.path)) return false;
+        return true;
+    });
+}
+
+// ── full scan ──────────────────────────────────────────────────────────────
+
 /**
  * Full scan for duplicates in a folder.
  */
@@ -259,6 +357,10 @@ export async function scanForDuplicates(
     );
 
     if (signal?.aborted) return [];
+
+    // Filter out pairs excluded via frontmatter before any content I/O
+    const exclusionMap = buildExclusionMap(app, files);
+    candidates = filterExcludedCandidates(candidates, exclusionMap);
 
     if (refine && candidates.length > 0) {
         candidates = await refineWithContent(

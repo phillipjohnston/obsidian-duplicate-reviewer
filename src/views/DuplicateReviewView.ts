@@ -254,6 +254,16 @@ export class DuplicateReviewView extends ItemView {
             });
         }
 
+        // Dismiss button
+        const dismissBtn = folderTitleEl.createDiv("duplicate-review-dismiss-btn");
+        dismissBtn.setText("Dismiss");
+        dismissBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            await this.plugin.dismissGroup(group.files.map((f) => f.path));
+            this.groups = this.groups.filter((g) => g !== group);
+            this.redraw();
+        });
+
         // Files in this group
         for (const file of group.files) {
             this.renderFile(childrenEl, file);

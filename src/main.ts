@@ -7,7 +7,7 @@ import {
     WorkspaceLeaf,
 } from "obsidian";
 
-import { DuplicateReviewerSettings, DEFAULT_SETTINGS, ScanProgress } from "./types";
+import { DuplicateReviewerSettings, DEFAULT_SETTINGS, DuplicateGroup, ScanProgress } from "./types";
 import { DuplicateReviewerSettingTab } from "./settings";
 import { DuplicateReviewView, DUPLICATE_REVIEW_VIEW_TYPE } from "./views/DuplicateReviewView";
 import { FolderSelectModal } from "./modals/FolderSelectModal";
@@ -18,6 +18,8 @@ import {
     findByPattern,
     findTitleDuplicates,
     groupDuplicates,
+    buildExclusionMap,
+    filterExcludedCandidates,
 } from "./scanner";
 import { CacheManager } from "./cache";
 
@@ -38,6 +40,10 @@ export default class DuplicateReviewerPlugin extends Plugin {
     private duplicateReviewView: DuplicateReviewView;
     // One controller per in-flight scan, keyed by folder path
     private scanControllers: Map<string, AbortController> = new Map();
+
+    // ── dismissal state ──────────────────────────────────────────────────────
+    dismissedGroups: string[][] = [];                 // persisted in data.json
+    private dismissedSet: Set<string> = new Set();    // O(1) lookup (paths joined by \0)
 
     async onload(): Promise<void> {
         await this.loadSettings();
@@ -166,8 +172,13 @@ export default class DuplicateReviewerPlugin extends Plugin {
             for (const key of SETTINGS_KEYS) {
                 if (key in data) partial[key] = data[key];
             }
+            // Load persisted dismissals
+            if (Array.isArray(data["dismissedGroups"])) {
+                this.dismissedGroups = data["dismissedGroups"] as string[][];
+            }
         }
         this.settings = Object.assign({}, DEFAULT_SETTINGS, partial);
+        this.rebuildDismissalSet();
     }
 
     async saveSettings(): Promise<void> {
@@ -177,6 +188,48 @@ export default class DuplicateReviewerPlugin extends Plugin {
             data[key] = this.settings[key];
         }
         await this.saveData(data);
+    }
+
+    // ── dismissal helpers ───────────────────────────────────────────────────
+
+    /** Rebuild the O(1) lookup set from the persisted array. */
+    private rebuildDismissalSet(): void {
+        this.dismissedSet.clear();
+        for (const group of this.dismissedGroups) {
+            this.dismissedSet.add([...group].sort().join("\0"));
+        }
+    }
+
+    /** Persist a group dismissal. */
+    public async dismissGroup(paths: string[]): Promise<void> {
+        const sorted = [...paths].sort();
+        this.dismissedGroups.push(sorted);
+        this.dismissedSet.add(sorted.join("\0"));
+        await this.saveDismissals();
+    }
+
+    /** Check whether a group (by its file paths) has been dismissed. */
+    public isDismissed(paths: string[]): boolean {
+        return this.dismissedSet.has([...paths].sort().join("\0"));
+    }
+
+    /** Remove all persisted dismissals. */
+    public async clearDismissals(): Promise<void> {
+        this.dismissedGroups = [];
+        this.dismissedSet.clear();
+        await this.saveDismissals();
+    }
+
+    /** Write dismissedGroups into data.json without clobbering other keys. */
+    private async saveDismissals(): Promise<void> {
+        const data = (await this.loadData()) || {};
+        data["dismissedGroups"] = this.dismissedGroups;
+        await this.saveData(data);
+    }
+
+    /** Drop any groups whose sorted path set is in the dismissal set. */
+    private filterDismissedGroups(groups: DuplicateGroup[]): DuplicateGroup[] {
+        return groups.filter((g) => !this.isDismissed(g.files.map((f) => f.path)));
     }
 
     // ── view activation ────────────────────────────────────────────────────
@@ -225,7 +278,7 @@ export default class DuplicateReviewerPlugin extends Plugin {
         if (!cached) return;
 
         const displayPath = recentPath === "/" ? "Entire vault" : recentPath;
-        this.duplicateReviewView.setGroups(cached, displayPath, true);
+        this.duplicateReviewView.setGroups(this.filterDismissedGroups(cached), displayPath, true);
     }
 
     // ── duplicate review (cache-aware) ─────────────────────────────────────
@@ -245,14 +298,15 @@ export default class DuplicateReviewerPlugin extends Plugin {
         const files = collectMarkdownFiles(this.app, folder, this.settings.ignoredFolders);
         const cached = this.cacheManager.get(cacheKey, files, this.settings);
         if (cached) {
+            const visible = this.filterDismissedGroups(cached);
             if (this.duplicateReviewView) {
-                this.duplicateReviewView.setGroups(cached, folderPath, true);
+                this.duplicateReviewView.setGroups(visible, folderPath, true);
             }
-            if (cached.length === 0) {
+            if (visible.length === 0) {
                 new Notice("No duplicates found (cached).");
             } else {
-                const totalFiles = cached.reduce((sum, g) => sum + g.files.length, 0);
-                new Notice(`Found ${cached.length} duplicate groups with ${totalFiles} files (cached).`);
+                const totalFiles = visible.reduce((sum, g) => sum + g.files.length, 0);
+                new Notice(`Found ${visible.length} duplicate groups with ${totalFiles} files (cached).`);
             }
             return;
         }
@@ -284,20 +338,21 @@ export default class DuplicateReviewerPlugin extends Plugin {
 
             if (controller.signal.aborted) return;
 
-            // Cache the result
+            // Cache the result (unfiltered — dismissals are a view-layer filter)
             this.cacheManager.put(cacheKey, files, groups, this.settings);
             this.cacheManager.clearDirtyPathsForFolder(cacheKey);
             await this.cacheManager.save();
 
+            const visible = this.filterDismissedGroups(groups);
             if (this.duplicateReviewView) {
-                this.duplicateReviewView.setGroups(groups, folderPath, false);
+                this.duplicateReviewView.setGroups(visible, folderPath, false);
             }
 
-            if (groups.length === 0) {
+            if (visible.length === 0) {
                 new Notice("No duplicates found.");
             } else {
-                const totalFiles = groups.reduce((sum, g) => sum + g.files.length, 0);
-                new Notice(`Found ${groups.length} duplicate groups with ${totalFiles} files.`);
+                const totalFiles = visible.reduce((sum, g) => sum + g.files.length, 0);
+                new Notice(`Found ${visible.length} duplicate groups with ${totalFiles} files.`);
             }
         } catch (error) {
             if (controller.signal.aborted) return;
@@ -368,7 +423,7 @@ export default class DuplicateReviewerPlugin extends Plugin {
 
             // If the review pane is currently showing this folder, refresh it
             if (this.duplicateReviewView) {
-                this.duplicateReviewView.setGroups(groups, folderPath, false);
+                this.duplicateReviewView.setGroups(this.filterDismissedGroups(groups), folderPath, false);
             }
         } catch (error) {
             notice.hide();
@@ -401,10 +456,14 @@ export default class DuplicateReviewerPlugin extends Plugin {
             }
 
             // Pattern scans are typically small — no caching, but still async + yielding
-            const candidates = await findTitleDuplicates(
+            let candidates = await findTitleDuplicates(
                 matchingFiles,
                 this.settings.titleSimilarityThreshold
             );
+
+            // Apply YAML exclusions before grouping
+            const exclusionMap = buildExclusionMap(this.app, matchingFiles);
+            candidates = filterExcludedCandidates(candidates, exclusionMap);
 
             const groups = groupDuplicates(candidates);
 
@@ -417,8 +476,9 @@ export default class DuplicateReviewerPlugin extends Plugin {
                 });
             }
 
+            const visible = this.filterDismissedGroups(groups);
             if (this.duplicateReviewView) {
-                this.duplicateReviewView.setGroups(groups, `Pattern: ${pattern}`, false);
+                this.duplicateReviewView.setGroups(visible, `Pattern: ${pattern}`, false);
             }
 
             new Notice(`Found ${matchingFiles.length} files matching "${pattern}".`);
