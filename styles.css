@@ -108,10 +108,43 @@
 
 /* Style file entries with path hint */
 .duplicate-review-groups .nav-file-title {
+    display: flex;
+    align-items: center;
     cursor: pointer;
 }
 
+.duplicate-review-groups .nav-file-title-content {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .duplicate-review-groups .nav-file-title:hover {
+    background-color: var(--background-modifier-hover);
+}
+
+/* Per-file dismiss (×) button — only visible on row hover */
+.duplicate-review-file-dismiss-btn {
+    display: none;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    font-size: 14px;
+    line-height: 1;
+    color: var(--text-faint);
+    cursor: pointer;
+    border-radius: 3px;
+}
+
+.duplicate-review-groups .nav-file:hover .duplicate-review-file-dismiss-btn {
+    display: flex;
+}
+
+.duplicate-review-file-dismiss-btn:hover {
+    color: var(--text-error);
     background-color: var(--background-modifier-hover);
 }
 

@@ -266,11 +266,11 @@ export class DuplicateReviewView extends ItemView {
 
         // Files in this group
         for (const file of group.files) {
-            this.renderFile(childrenEl, file);
+            this.renderFile(childrenEl, file, group);
         }
     }
 
-    private renderFile(parentEl: HTMLElement, file: TFile): void {
+    private renderFile(parentEl: HTMLElement, file: TFile, group: DuplicateGroup): void {
         const navFileEl = parentEl.createDiv("nav-file");
 
         const navFileTitle = navFileEl.createDiv("nav-file-title");
@@ -278,6 +278,17 @@ export class DuplicateReviewView extends ItemView {
 
         // Show path hint on hover
         navFileTitle.setAttribute("aria-label", file.path);
+
+        // × button — dismiss this single file from the group
+        const dismissBtn = navFileTitle.createDiv("duplicate-review-file-dismiss-btn");
+        dismissBtn.setText("×");
+        dismissBtn.setAttribute("aria-label", "Dismiss");
+        dismissBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            await this.plugin.dismissFile(file.path);
+            group.files = group.files.filter((f) => f.path !== file.path);
+            this.redraw();
+        });
 
         // Click to open
         navFileTitle.addEventListener("click", async (e) => {
