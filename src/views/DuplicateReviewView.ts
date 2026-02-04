@@ -254,7 +254,7 @@ export class DuplicateReviewView extends ItemView {
             });
         }
 
-        // Dismiss button
+        // Dismiss button (persists to ignore list)
         const dismissBtn = folderTitleEl.createDiv("duplicate-review-dismiss-btn");
         dismissBtn.setText("Dismiss");
         dismissBtn.addEventListener("click", async (e) => {
@@ -264,13 +264,22 @@ export class DuplicateReviewView extends ItemView {
             this.redraw();
         });
 
+        // × button (remove from view only, no persistence)
+        const closeBtn = folderTitleEl.createDiv("duplicate-review-close-btn");
+        closeBtn.setText("×");
+        closeBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            this.groups = this.groups.filter((g) => g !== group);
+            this.redraw();
+        });
+
         // Files in this group
         for (const file of group.files) {
-            this.renderFile(childrenEl, file, group);
+            this.renderFile(childrenEl, file);
         }
     }
 
-    private renderFile(parentEl: HTMLElement, file: TFile, group: DuplicateGroup): void {
+    private renderFile(parentEl: HTMLElement, file: TFile): void {
         const navFileEl = parentEl.createDiv("nav-file");
 
         const navFileTitle = navFileEl.createDiv("nav-file-title");
@@ -278,17 +287,6 @@ export class DuplicateReviewView extends ItemView {
 
         // Show path hint on hover
         navFileTitle.setAttribute("aria-label", file.path);
-
-        // × button — dismiss this single file from the group
-        const dismissBtn = navFileTitle.createDiv("duplicate-review-file-dismiss-btn");
-        dismissBtn.setText("×");
-        dismissBtn.setAttribute("aria-label", "Dismiss");
-        dismissBtn.addEventListener("click", async (e) => {
-            e.stopPropagation();
-            await this.plugin.dismissFile(file.path);
-            group.files = group.files.filter((f) => f.path !== file.path);
-            this.redraw();
-        });
 
         // Click to open
         navFileTitle.addEventListener("click", async (e) => {

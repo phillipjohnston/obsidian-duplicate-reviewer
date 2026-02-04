@@ -44,8 +44,6 @@ export default class DuplicateReviewerPlugin extends Plugin {
     // ── dismissal state ──────────────────────────────────────────────────────
     dismissedGroups: string[][] = [];                 // persisted in data.json
     private dismissedSet: Set<string> = new Set();    // O(1) lookup (paths joined by \0)
-    dismissedFiles: string[] = [];                    // per-file dismissals, persisted
-    private dismissedFileSet: Set<string> = new Set(); // O(1) lookup by path
 
     async onload(): Promise<void> {
         await this.loadSettings();
@@ -178,13 +176,9 @@ export default class DuplicateReviewerPlugin extends Plugin {
             if (Array.isArray(data["dismissedGroups"])) {
                 this.dismissedGroups = data["dismissedGroups"] as string[][];
             }
-            if (Array.isArray(data["dismissedFiles"])) {
-                this.dismissedFiles = data["dismissedFiles"] as string[];
-            }
         }
         this.settings = Object.assign({}, DEFAULT_SETTINGS, partial);
         this.rebuildDismissalSet();
-        this.rebuildDismissalFileSet();
     }
 
     async saveSettings(): Promise<void> {
@@ -219,46 +213,23 @@ export default class DuplicateReviewerPlugin extends Plugin {
         return this.dismissedSet.has([...paths].sort().join("\0"));
     }
 
-    /** Rebuild the per-file lookup set from the persisted array. */
-    private rebuildDismissalFileSet(): void {
-        this.dismissedFileSet = new Set(this.dismissedFiles);
-    }
-
-    /** Persist a single-file dismissal. */
-    public async dismissFile(path: string): Promise<void> {
-        if (!this.dismissedFileSet.has(path)) {
-            this.dismissedFiles.push(path);
-            this.dismissedFileSet.add(path);
-            await this.saveDismissals();
-        }
-    }
-
     /** Remove all persisted dismissals. */
     public async clearDismissals(): Promise<void> {
         this.dismissedGroups = [];
         this.dismissedSet.clear();
-        this.dismissedFiles = [];
-        this.dismissedFileSet.clear();
         await this.saveDismissals();
     }
 
-    /** Write dismissals into data.json without clobbering other keys. */
+    /** Write dismissedGroups into data.json without clobbering other keys. */
     private async saveDismissals(): Promise<void> {
         const data = (await this.loadData()) || {};
         data["dismissedGroups"] = this.dismissedGroups;
-        data["dismissedFiles"] = this.dismissedFiles;
         await this.saveData(data);
     }
 
-    /** Drop dismissed groups; strip individually-dismissed files; drop groups that shrink to ≤1. */
+    /** Drop any groups whose sorted path set is in the dismissal set. */
     private filterDismissedGroups(groups: DuplicateGroup[]): DuplicateGroup[] {
-        return groups
-            .filter((g) => !this.isDismissed(g.files.map((f) => f.path)))
-            .map((g) => ({
-                ...g,
-                files: g.files.filter((f) => !this.dismissedFileSet.has(f.path)),
-            }))
-            .filter((g) => g.files.length > 1);
+        return groups.filter((g) => !this.isDismissed(g.files.map((f) => f.path)));
     }
 
     // ── view activation ────────────────────────────────────────────────────

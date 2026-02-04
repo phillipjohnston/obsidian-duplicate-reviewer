@@ -97,6 +97,28 @@
     color: var(--text-normal);
 }
 
+/* × close button in group header (remove from view, no persist) */
+.duplicate-review-close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    margin-left: 4px;
+    font-size: 14px;
+    line-height: 1;
+    color: var(--text-faint);
+    cursor: pointer;
+    border-radius: 3px;
+    transition: color 0.1s ease, background-color 0.1s ease;
+}
+
+.duplicate-review-close-btn:hover {
+    color: var(--text-error);
+    background-color: var(--background-modifier-hover);
+}
+
 /* Description text in settings sections */
 .duplicate-review-setting-desc {
     font-size: 13px;
@@ -108,43 +130,10 @@
 
 /* Style file entries with path hint */
 .duplicate-review-groups .nav-file-title {
-    display: flex;
-    align-items: center;
     cursor: pointer;
-}
-
-.duplicate-review-groups .nav-file-title-content {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
 
 .duplicate-review-groups .nav-file-title:hover {
-    background-color: var(--background-modifier-hover);
-}
-
-/* Per-file dismiss (×) button — only visible on row hover */
-.duplicate-review-file-dismiss-btn {
-    display: none;
-    flex-shrink: 0;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    font-size: 14px;
-    line-height: 1;
-    color: var(--text-faint);
-    cursor: pointer;
-    border-radius: 3px;
-}
-
-.duplicate-review-groups .nav-file:hover .duplicate-review-file-dismiss-btn {
-    display: flex;
-}
-
-.duplicate-review-file-dismiss-btn:hover {
-    color: var(--text-error);
     background-color: var(--background-modifier-hover);
 }
 
